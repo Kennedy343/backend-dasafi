@@ -1,0 +1,49 @@
+# --- Etapa 1: El "Constructor" (builder) ---
+# Usamos una imagen de Node.js 18 (alpina, que es ligera) y le ponemos un alias 'builder'
+FROM node:18-alpine AS builder
+
+# Creamos la carpeta de trabajo dentro del contenedor
+WORKDIR /usr/src/app
+
+# Copia los archivos de definición de paquetes
+COPY package*.json ./
+
+# Instala TODAS las dependencias (incluyendo 'devDependencies' como TypeScript y 'sharp')
+RUN npm install
+
+# Copia todo el resto del código fuente (src, tsconfig.json, etc.)
+COPY . .
+
+# Ejecuta el script de 'build' de NestJS para compilar TypeScript a JavaScript
+# Esto crea la carpeta /dist
+RUN npm run build
+
+# ¡Paso clave de optimización!
+# Elimina las 'devDependencies' (como typescript) de node_modules
+# Dejando solo lo que la app necesita para correr (como sharp, express, etc.)
+RUN npm prune --production
+
+# --- Etapa 2: La "Producción" (Final) ---
+# Empezamos de cero con una imagen de Node limpia y ligera
+FROM node:18-alpine
+
+# Creamos la carpeta de trabajo
+WORKDIR /usr/src/app
+
+# Copiamos solo los 3 elementos que necesitamos de la etapa 'builder'
+# 1. Los package.json (para referencia)
+COPY --from=builder /usr/src/app/package*.json ./
+
+# 2. Los node_modules (ya "podados", solo con dependencias de producción)
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+
+# 3. El código JavaScript ya compilado
+COPY --from=builder /usr/src/app/dist ./dist
+
+# Expone el puerto 3000 (el que usa NestJS)
+# Esto es más que nada documentación; el 'ports' en docker-compose es el que realmente lo abre.
+EXPOSE 3000
+
+# El comando que se ejecutará cuando el contenedor arranque
+# Le dice a Node que ejecute el archivo 'main.js' de la carpeta 'dist'
+CMD ["node", "dist/main"]
