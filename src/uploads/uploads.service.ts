@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import sharp from 'sharp';
 import * as path from 'path';
-import * as fs from 'fs'; // Importa el módulo 'fs' de Node.js
+import * as fs from 'fs';
 
 // Define el directorio de 'uploads' en la raíz del proyecto
 const uploadDir = path.join(process.cwd(), 'uploads');
