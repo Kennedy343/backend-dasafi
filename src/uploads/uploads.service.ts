@@ -1,17 +1,26 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import sharp from 'sharp'; 
+import {
+  Injectable,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+import sharp from 'sharp';
 import * as path from 'path';
-import * as fs from 'fs';
+import * as fs from 'fs'; // Importa el módulo 'fs' de Node.js
 
-// Asegurarse de que la carpeta 'uploads' exista
+// Define el directorio de 'uploads' en la raíz del proyecto
 const uploadDir = path.join(process.cwd(), 'uploads');
+
+// Asegura que el directorio 'uploads' exista al iniciar el servicio
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 @Injectable()
 export class UploadService {
-  
+  // Un "Logger" para registrar advertencias o errores en la consola
+  private readonly logger = new Logger(UploadService.name);
+
   /**
    * Procesa un buffer de imagen, crea una versión principal y un thumbnail,
    * los guarda en /uploads y devuelve los nombres de archivo.
@@ -52,13 +61,59 @@ export class UploadService {
 
       // 5. Devolver solo los nombres de archivo
       return { mainImageName, thumbImageName };
-      
     } catch (error) {
-      console.error(error);
+      this.logger.error('Error al procesar la imagen', error.stack);
       throw new HttpException(
         'Error al procesar la imagen.',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
+    }
+  }
+
+  /**
+   * Borra un archivo físicamente del disco duro.
+   * Recibe el nombre del archivo (ej. "1678886400000-123456789-main.webp")
+   */
+  async deleteFile(filename: string): Promise<void> {
+    if (!filename) {
+      return; // No hacer nada si el nombre está vacío
+    }
+
+    try {
+      const filePath = path.join(uploadDir, filename);
+
+      // fs.promises.unlink es el comando de Node.js para "borrar archivo"
+      await fs.promises.unlink(filePath);
+    } catch (error) {
+      // Si el archivo no existía (error 'ENOENT'), no es un error crítico.
+      // Solo lo registramos en el log y continuamos.
+      if (error.code === 'ENOENT') {
+        this.logger.warn(`Intento de borrar archivo no encontrado: ${filename}`);
+      } else {
+        // Para cualquier otro error, sí lo registramos como un error
+        this.logger.error(`Error al borrar archivo ${filename}`, error.stack);
+        throw new HttpException(
+          'Error al borrar el archivo del servidor.',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+    }
+  }
+
+  /**
+   * UTILIDAD: Extrae el nombre del archivo de una URL completa.
+   * ej: "http://localhost:3000/uploads/archivo.webp" -> "archivo.webp"
+   */
+  public getFilenameFromUrl(url: string): string | null {
+    if (!url) return null;
+    try {
+      // Usa el constructor de URL nativo de Node.js
+      const parsedUrl = new URL(url);
+      // path.basename extrae la última parte de la ruta (el nombre del archivo)
+      return path.basename(parsedUrl.pathname);
+    } catch (error) {
+      this.logger.warn(`URL inválida, no se pudo extraer el nombre: ${url}`);
+      return null;
     }
   }
 }
